@@ -1,0 +1,6 @@
+dist/
+cygwin.dll
+iperf3
+iperf3.exe
+iperf3_exporter
+iperf3_exporter.exe
