@@ -42,8 +42,8 @@ var (
 	timeout       = kingpin.Flag("iperf3.timeout", "iperf3 run timeout.").Default("30s").Duration()
 
 	// Metrics about the iperf3 exporter itself.
-	iperfDuration = prometheus.NewSummary(prometheus.SummaryOpts{Name: prometheus.BuildFQName(namespace, "", "duration_seconds"), Help: "Duration of collections by the iperf3 exporter."})
-	iperfErrors   = prometheus.NewCounter(prometheus.CounterOpts{Name: prometheus.BuildFQName(namespace, "", "errors_total"), Help: "Errors raised by the iperf3 exporter."})
+	iperfDuration = prometheus.NewSummary(prometheus.SummaryOpts{Name: prometheus.BuildFQName(namespace, "exporter", "duration_seconds"), Help: "Duration of collections by the iperf3 exporter."})
+	iperfErrors   = prometheus.NewCounter(prometheus.CounterOpts{Name: prometheus.BuildFQName(namespace, "exporter", "errors_total"), Help: "Errors raised by the iperf3 exporter."})
 )
 
 // iperfResult collects the partial result from the iperf3 run
