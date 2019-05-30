@@ -68,7 +68,7 @@ type Exporter struct {
 	timeout time.Duration
 	mutex   sync.RWMutex
 
-	up              *prometheus.Desc
+	success         *prometheus.Desc
 	sentSeconds     *prometheus.Desc
 	sentBytes       *prometheus.Desc
 	receivedSeconds *prometheus.Desc
@@ -81,7 +81,7 @@ func NewExporter(target string, period time.Duration, timeout time.Duration) *Ex
 		target:          target,
 		period:          period,
 		timeout:         timeout,
-		up:              prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "up"), "Was the last iperf3 probe successful.", nil, nil),
+		success:         prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
 		sentSeconds:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_seconds"), "Total seconds spent sending packets.", nil, nil),
 		sentBytes:       prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
 		receivedSeconds: prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_seconds"), "Total seconds spent receiving packets.", nil, nil),
@@ -92,7 +92,7 @@ func NewExporter(target string, period time.Duration, timeout time.Duration) *Ex
 // Describe describes all the metrics exported by the iperf3 exporter. It
 // implements prometheus.Collector.
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
-	ch <- e.up
+	ch <- e.success
 	ch <- e.sentSeconds
 	ch <- e.sentBytes
 	ch <- e.receivedSeconds
@@ -110,7 +110,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	out, err := exec.CommandContext(ctx, iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target).Output()
 	if err != nil {
-		ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 		iperfErrors.Inc()
 		log.Errorf("Failed to run iperf3: %s", err)
 		return
@@ -118,13 +118,13 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	stats := iperfResult{}
 	if err := json.Unmarshal(out, &stats); err != nil {
-		ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 		iperfErrors.Inc()
 		log.Errorf("Failed to parse iperf3 result: %s", err)
 		return
 	}
 
-	ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 1)
+	ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 1)
 	ch <- prometheus.MustNewConstMetric(e.sentSeconds, prometheus.GaugeValue, stats.End.SumSent.Seconds)
 	ch <- prometheus.MustNewConstMetric(e.sentBytes, prometheus.GaugeValue, stats.End.SumSent.Bytes)
 	ch <- prometheus.MustNewConstMetric(e.receivedSeconds, prometheus.GaugeValue, stats.End.SumReceived.Seconds)
