@@ -172,6 +172,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			timeoutSeconds = 30
 		}
 	}
+
+	if timeoutSeconds > 30 {
+		timeoutSeconds = 30
+	}
+
 	runTimeout := time.Duration(timeoutSeconds * float64(time.Second))
 
 	start := time.Now()
@@ -217,6 +222,12 @@ func main() {
 		}
 	})
 
-	log.Infof("Listening on %s", *listenAddress)
-	log.Fatal(http.ListenAndServe(*listenAddress, nil))
+	srv := &http.Server{
+		Addr:         *listenAddress,
+		ReadTimeout:  60 * time.Second,
+		WriteTimeout: 60 * time.Second,
+	}
+
+	log.Infof("Listening on %s", srv.Addr)
+	log.Fatal(srv.ListenAndServe())
 }
