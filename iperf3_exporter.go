@@ -64,6 +64,7 @@ type iperfResult struct {
 // the prometheus metrics package.
 type Exporter struct {
 	target  string
+        port	int
 	period  time.Duration
 	timeout time.Duration
 	mutex   sync.RWMutex
@@ -76,9 +77,10 @@ type Exporter struct {
 }
 
 // NewExporter returns an initialized Exporter.
-func NewExporter(target string, period time.Duration, timeout time.Duration) *Exporter {
+func NewExporter(target string, port int, period time.Duration, timeout time.Duration) *Exporter {
 	return &Exporter{
 		target:          target,
+                port:            port,
 		period:          period,
 		timeout:         timeout,
 		success:         prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
@@ -108,7 +110,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target).Output()
+	out, err := exec.CommandContext(ctx, iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)).Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 		iperfErrors.Inc()
@@ -138,7 +140,22 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		iperfErrors.Inc()
 		return
 	}
-
+        
+        var targetPort int
+        port := r.URL.Query().Get("port")
+        if port != "" {
+                var err error 
+                targetPort, err = strconv.Atoi(port)
+                if err != nil {
+                        http.Error(w, fmt.Sprintf("'port' parameter must be an integer: %s", err), http.StatusBadRequest)
+                        iperfErrors.Inc()
+                        return
+                }
+        } 
+        if targetPort == 0 {
+                targetPort = 5201
+        }
+        
 	var runPeriod time.Duration
 	period := r.URL.Query().Get("period")
 	if period != "" {
@@ -181,7 +198,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	registry := prometheus.NewRegistry()
-	exporter := NewExporter(target, runPeriod, runTimeout)
+	exporter := NewExporter(target, targetPort, runPeriod, runTimeout)
 	registry.MustRegister(exporter)
 
 	// Delegate http serving to Prometheus client library, which will call collector.Collect.
