@@ -47,6 +47,8 @@ scrape_configs:
       - targets:
         - foo.server
         - bar.server
+    params:
+      port: ['5201']
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
