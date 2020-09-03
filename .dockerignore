@@ -1,0 +1,6 @@
+.*
+Dockerfile
+LICENSE
+NOTICE
+README*
+iperf3_windows.go
