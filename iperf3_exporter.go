@@ -112,12 +112,12 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 
-	var iperfArgs []interface{}
-	iperfArgs = []interface{}{iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)}
+	var iperfArgs []string
+	iperfArgs = []string{"-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)}
 	if e.reverse{
 		iperfArgs = append(iperfArgs, "-R")
 	}
-	out, err := exec.CommandContext(ctx, iperfArgs...).Output()
+	out, err := exec.CommandContext(ctx, iperfCmd, iperfArgs...).Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 		iperfErrors.Inc()
