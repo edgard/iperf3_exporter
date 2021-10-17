@@ -58,6 +58,14 @@ scrape_configs:
         replacement: 127.0.0.1:9579  # The iPerf3 exporter's real hostname:port.
 ```
 
+### Querying the bandwidth
+
+You can use the following Prometheus query to get the receiver bandwidth (download speed on measured iperf server) in Mbits/sec:
+
+```
+iperf3_received_bytes / iperf3_received_seconds * 8 / 1000000
+```
+
 ## License
 
 Apache License 2.0, see [LICENSE](https://github.com/edgard/iperf3_exporter/blob/master/LICENSE).
