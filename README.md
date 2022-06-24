@@ -36,7 +36,9 @@ This can be also be limited by the `iperf3.timeout` command-line flag. If neithe
 ## Prometheus Configuration
 
 The iPerf3 exporter needs to be passed the target as a parameter, this can be done with relabelling.
-Optional: pass the port that the target iperf3 server is lisenting on as the "port" parameter.
+Optional: 
+  - pass the port that the target iperf3 server is lisenting on as the "port" parameter.
+  - pass the target bitrate ( #[KMG][/#]) as the "bitrate" parameter, default is unlimited.
 
 Example config:
 ```yml

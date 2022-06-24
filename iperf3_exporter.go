@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -64,7 +65,8 @@ type iperfResult struct {
 // the prometheus metrics package.
 type Exporter struct {
 	target  string
-        port	int
+	port    int
+	bitrate string
 	period  time.Duration
 	timeout time.Duration
 	mutex   sync.RWMutex
@@ -76,13 +78,16 @@ type Exporter struct {
 	receivedBytes   *prometheus.Desc
 }
 
+var bitrateMask = regexp.MustCompile(`^[0-9]+([KMG])?(\/[0-9]+)?$`)
+
 // NewExporter returns an initialized Exporter.
-func NewExporter(target string, port int, period time.Duration, timeout time.Duration) *Exporter {
+func NewExporter(target string, port int, period time.Duration, timeout time.Duration, bitrate string) *Exporter {
 	return &Exporter{
 		target:          target,
-                port:            port,
+		port:            port,
 		period:          period,
 		timeout:         timeout,
+		bitrate:         bitrate,
 		success:         prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
 		sentSeconds:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_seconds"), "Total seconds spent sending packets.", nil, nil),
 		sentBytes:       prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
@@ -110,7 +115,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)).Output()
+	var iperfArgs []string
+	iperfArgs = append(iperfArgs, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port))
+
+	if e.bitrate != "" {
+		iperfArgs = append(iperfArgs, "-b", e.bitrate)
+	}
+
+	out, err := exec.CommandContext(ctx, iperfCmd, iperfArgs...).Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 		iperfErrors.Inc()
@@ -140,22 +152,22 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		iperfErrors.Inc()
 		return
 	}
-        
-        var targetPort int
-        port := r.URL.Query().Get("port")
-        if port != "" {
-                var err error 
-                targetPort, err = strconv.Atoi(port)
-                if err != nil {
-                        http.Error(w, fmt.Sprintf("'port' parameter must be an integer: %s", err), http.StatusBadRequest)
-                        iperfErrors.Inc()
-                        return
-                }
-        } 
-        if targetPort == 0 {
-                targetPort = 5201
-        }
-        
+
+	var targetPort int
+	port := r.URL.Query().Get("port")
+	if port != "" {
+		var err error
+		targetPort, err = strconv.Atoi(port)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("'port' parameter must be an integer: %s", err), http.StatusBadRequest)
+			iperfErrors.Inc()
+			return
+		}
+	}
+	if targetPort == 0 {
+		targetPort = 5201
+	}
+
 	var runPeriod time.Duration
 	period := r.URL.Query().Get("period")
 	if period != "" {
@@ -169,6 +181,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 	if runPeriod.Seconds() == 0 {
 		runPeriod = time.Second * 5
+	}
+
+	bitrate := r.URL.Query().Get("bitrate")
+	if bitrate != "" {
+		if !bitrateMask.MatchString(bitrate) {
+			http.Error(w, "bitrate must provided as #[KMG][/#], target bitrate in bits/sec (0 for unlimited), (default 1 Mbit/sec for UDP, unlimited for TCP) (optional slash and packet count for burst mode)", http.StatusBadRequest)
+			iperfErrors.Inc()
+			return
+		}
 	}
 
 	// If a timeout is configured via the Prometheus header, add it to the request.
@@ -198,7 +219,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	registry := prometheus.NewRegistry()
-	exporter := NewExporter(target, targetPort, runPeriod, runTimeout)
+	exporter := NewExporter(target, targetPort, runPeriod, runTimeout, bitrate)
 	registry.MustRegister(exporter)
 
 	// Delegate http serving to Prometheus client library, which will call collector.Collect.
