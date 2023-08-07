@@ -65,10 +65,12 @@ type iperfResult struct {
 type Exporter struct {
 	target  string
         port	int
+        thread  int
 	period  time.Duration
 	timeout time.Duration
 	mutex   sync.RWMutex
 
+        nbThread        *prometheus.Desc
 	success         *prometheus.Desc
 	sentSeconds     *prometheus.Desc
 	sentBytes       *prometheus.Desc
@@ -77,12 +79,14 @@ type Exporter struct {
 }
 
 // NewExporter returns an initialized Exporter.
-func NewExporter(target string, port int, period time.Duration, timeout time.Duration) *Exporter {
+func NewExporter(target string, port int, thread int, period time.Duration, timeout time.Duration) *Exporter {
 	return &Exporter{
 		target:          target,
                 port:            port,
+                thread:          thread,
 		period:          period,
 		timeout:         timeout,
+		nbThread:        prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "nb_thread"), "Total number of thread used by the client.", nil, nil),
 		success:         prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
 		sentSeconds:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_seconds"), "Total seconds spent sending packets.", nil, nil),
 		sentBytes:       prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
@@ -94,6 +98,7 @@ func NewExporter(target string, port int, period time.Duration, timeout time.Dur
 // Describe describes all the metrics exported by the iperf3 exporter. It
 // implements prometheus.Collector.
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+        ch <- e.nbThread
 	ch <- e.success
 	ch <- e.sentSeconds
 	ch <- e.sentBytes
@@ -110,8 +115,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)).Output()
-	if err != nil {
+        var iperfArgs []string
+        iperfArgs = append(iperfArgs, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port))
+
+        iperfArgs = append(iperfArgs, "-P", strconv.Itoa(e.thread))
+
+        out, err := exec.CommandContext(ctx, iperfCmd, iperfArgs...).Output()
+
+        if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 		iperfErrors.Inc()
 		log.Errorf("Failed to run iperf3: %s", err)
@@ -126,6 +137,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
+	ch <- prometheus.MustNewConstMetric(e.nbThread, prometheus.GaugeValue, float64(e.thread))
 	ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 1)
 	ch <- prometheus.MustNewConstMetric(e.sentSeconds, prometheus.GaugeValue, stats.End.SumSent.Seconds)
 	ch <- prometheus.MustNewConstMetric(e.sentBytes, prometheus.GaugeValue, stats.End.SumSent.Bytes)
@@ -140,22 +152,37 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		iperfErrors.Inc()
 		return
 	}
-        
+
         var targetPort int
         port := r.URL.Query().Get("port")
         if port != "" {
-                var err error 
+                var err error
                 targetPort, err = strconv.Atoi(port)
                 if err != nil {
                         http.Error(w, fmt.Sprintf("'port' parameter must be an integer: %s", err), http.StatusBadRequest)
                         iperfErrors.Inc()
                         return
                 }
-        } 
+        }
         if targetPort == 0 {
                 targetPort = 5201
         }
-        
+
+        var targetThread int
+        thread := r.URL.Query().Get("thread")
+        if thread != "" {
+                var err error
+                targetThread, err = strconv.Atoi(thread)
+                if err != nil {
+                        http.Error(w, fmt.Sprintf("'thread' parameter must be an integer: %s", err), http.StatusBadRequest)
+                        iperfErrors.Inc()
+                        return
+                }
+        }
+        if targetThread <= 0 {
+                targetThread = 1
+        }
+
 	var runPeriod time.Duration
 	period := r.URL.Query().Get("period")
 	if period != "" {
@@ -198,7 +225,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	registry := prometheus.NewRegistry()
-	exporter := NewExporter(target, targetPort, runPeriod, runTimeout)
+	exporter := NewExporter(target, targetPort, targetThread, runPeriod, runTimeout)
 	registry.MustRegister(exporter)
 
 	// Delegate http serving to Prometheus client library, which will call collector.Collect.
