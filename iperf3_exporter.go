@@ -14,15 +14,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -89,7 +94,7 @@ type Exporter struct {
 	retransmits           *prometheus.Desc
 }
 
-var bitrateMask = regexp.MustCompile(`^[0-9]+([KMG])?(\\/[0-9]+)?$`)
+var bitrateMask = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?([KMG])?(\\/[0-9]+)?$`)
 
 // NewExporter returns an initialized Exporter.
 func NewExporter(target string, port int, period time.Duration, timeout time.Duration, reverse bool, bitrate string) *Exporter {
@@ -134,19 +139,33 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	defer cancel()
 
 	var iperfArgs []string
+
 	iperfArgs = []string{"-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)}
 	if e.reverse {
 		iperfArgs = append(iperfArgs, "-R")
 	}
+
 	if e.bitrate != "" {
 		iperfArgs = append(iperfArgs, "-b", e.bitrate)
 	}
-	out, err := exec.CommandContext(ctx, iperfCmd, iperfArgs...).Output()
+
+	cmd := exec.CommandContext(ctx, iperfCmd, iperfArgs...)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	out, err := cmd.Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 
 		iperfErrors.Inc()
-		level.Error(logger).Log("msg", "Failed to run iperf3", "err", err)
+
+		stderrOutput := stderr.String()
+		if stderrOutput != "" {
+			level.Error(logger).Log("msg", "Failed to run iperf3", "err", err, "stderr", stderrOutput)
+		} else {
+			level.Error(logger).Log("msg", "Failed to run iperf3", "err", err)
+		}
 
 		return
 	}
@@ -200,9 +219,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var reverseMode bool
+
 	reverse_mode := r.URL.Query().Get("reverse_mode")
 	if reverse_mode != "" {
 		var err error
+
 		reverseMode, err = strconv.ParseBool(reverse_mode)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("'reverse_mode' parameter must be true or false (boolean): %s", err), http.StatusBadRequest)
@@ -270,6 +291,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		timeoutSeconds = 30
 	}
 
+	// Ensure run period is less than timeout to avoid premature termination
+	if runPeriod.Seconds() >= timeoutSeconds {
+		runPeriod = time.Duration(timeoutSeconds*0.9) * time.Second
+	}
+
 	runTimeout := time.Duration(timeoutSeconds * float64(time.Second))
 
 	start := time.Now()
@@ -285,6 +311,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	iperfDuration.Observe(duration)
 }
 
+// checkIperf3Exists verifies that the iperf3 command exists and is executable.
+func checkIperf3Exists() error {
+	_, err := exec.LookPath(iperfCmd)
+
+	return err
+}
+
 func main() {
 	promlogConfig := &promlog.Config{}
 	flag.AddFlags(kingpin.CommandLine, promlogConfig)
@@ -295,6 +328,12 @@ func main() {
 	logger = promlog.New(promlogConfig)
 	level.Info(logger).Log("msg", "Starting iperf3 exporter", "version", version.Info())
 	level.Info(logger).Log("msg", "Build context", "context", version.BuildContext())
+
+	// Check if iperf3 exists
+	if err := checkIperf3Exists(); err != nil {
+		level.Error(logger).Log("msg", "iperf3 command not found, please install iperf3", "err", err)
+		os.Exit(1)
+	}
 
 	prometheus.MustRegister(version.NewCollector("iperf3_exporter"))
 	prometheus.MustRegister(iperfDuration)
@@ -324,6 +363,33 @@ func main() {
 		WriteTimeout: 60 * time.Second,
 	}
 
+	// Setup graceful shutdown
+	idleConnsClosed := make(chan struct{})
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		sig := <-sigChan
+		level.Info(logger).Log("msg", "Received signal, shutting down gracefully", "signal", sig.String())
+
+		// We received an interrupt signal, shut down.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			// Error from closing listeners, or context timeout:
+			level.Error(logger).Log("msg", "HTTP server shutdown error", "err", err)
+		}
+
+		close(idleConnsClosed)
+	}()
+
 	level.Info(logger).Log("msg", "Listening on", "address", srv.Addr)
-	level.Error(logger).Log("msg", "Server stopped", "err", srv.ListenAndServe())
+
+	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		// Error starting or closing listener:
+		level.Error(logger).Log("msg", "HTTP server error", "err", err)
+	}
+
+	<-idleConnsClosed
+	level.Info(logger).Log("msg", "Server stopped gracefully")
 }
