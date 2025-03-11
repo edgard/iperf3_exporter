@@ -54,13 +54,15 @@ var (
 type iperfResult struct {
 	End struct {
 		SumSent struct {
-			Seconds     float64 `json:"seconds"`
-			Bytes       float64 `json:"bytes"`
-			Retransmits float64 `json:"retransmits"`
+			Seconds       float64 `json:"seconds"`
+			Bytes         float64 `json:"bytes"`
+			BitsPerSecond float64 `json:"bits_per_second"`
+			Retransmits   float64 `json:"retransmits"`
 		} `json:"sum_sent"`
 		SumReceived struct {
-			Seconds float64 `json:"seconds"`
-			Bytes   float64 `json:"bytes"`
+			Seconds       float64 `json:"seconds"`
+			Bytes         float64 `json:"bytes"`
+			BitsPerSecond float64 `json:"bits_per_second"`
 		} `json:"sum_received"`
 	} `json:"end"`
 }
@@ -75,28 +77,32 @@ type Exporter struct {
 	mutex   sync.RWMutex
 	reverse bool
 
-	success         *prometheus.Desc
-	sentSeconds     *prometheus.Desc
-	sentBytes       *prometheus.Desc
-	receivedSeconds *prometheus.Desc
-	receivedBytes   *prometheus.Desc
-	retransmits     *prometheus.Desc
+	success               *prometheus.Desc
+	sentSeconds           *prometheus.Desc
+	sentBytes             *prometheus.Desc
+	sentBitsPerSecond     *prometheus.Desc
+	receivedSeconds       *prometheus.Desc
+	receivedBytes         *prometheus.Desc
+	receivedBitsPerSecond *prometheus.Desc
+	retransmits           *prometheus.Desc
 }
 
 // NewExporter returns an initialized Exporter.
 func NewExporter(target string, port int, period time.Duration, timeout time.Duration, reverse bool) *Exporter {
 	return &Exporter{
-		target:          target,
-		port:            port,
-		period:          period,
-		timeout:         timeout,
-		reverse:         reverse,
-		success:         prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
-		sentSeconds:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_seconds"), "Total seconds spent sending packets.", nil, nil),
-		sentBytes:       prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
-		receivedSeconds: prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_seconds"), "Total seconds spent receiving packets.", nil, nil),
-		receivedBytes:   prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_bytes"), "Total received bytes.", nil, nil),
-		retransmits:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "retransmits"), "Total retransmits", nil, nil),
+		target:                target,
+		port:                  port,
+		period:                period,
+		timeout:               timeout,
+		reverse:               reverse,
+		success:               prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
+		sentSeconds:           prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_seconds"), "Total seconds spent sending packets.", nil, nil),
+		sentBytes:             prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
+		sentBitsPerSecond:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bps"), "Bits per second on sending packets.", nil, nil),
+		receivedSeconds:       prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_seconds"), "Total seconds spent receiving packets.", nil, nil),
+		receivedBytes:         prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_bytes"), "Total received bytes.", nil, nil),
+		receivedBitsPerSecond: prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_bps"), "Bits per second on receiving packets.", nil, nil),
+		retransmits:           prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "retransmits"), "Total retransmits", nil, nil),
 	}
 }
 
@@ -106,8 +112,10 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.success
 	ch <- e.sentSeconds
 	ch <- e.sentBytes
+	ch <- e.sentBitsPerSecond
 	ch <- e.receivedSeconds
 	ch <- e.receivedBytes
+	ch <- e.receivedBitsPerSecond
 	ch <- e.retransmits
 }
 
@@ -148,8 +156,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 1)
 	ch <- prometheus.MustNewConstMetric(e.sentSeconds, prometheus.GaugeValue, stats.End.SumSent.Seconds)
 	ch <- prometheus.MustNewConstMetric(e.sentBytes, prometheus.GaugeValue, stats.End.SumSent.Bytes)
+	ch <- prometheus.MustNewConstMetric(e.sentBitsPerSecond, prometheus.GaugeValue, stats.End.SumSent.BitsPerSecond)
 	ch <- prometheus.MustNewConstMetric(e.receivedSeconds, prometheus.GaugeValue, stats.End.SumReceived.Seconds)
 	ch <- prometheus.MustNewConstMetric(e.receivedBytes, prometheus.GaugeValue, stats.End.SumReceived.Bytes)
+	ch <- prometheus.MustNewConstMetric(e.receivedBitsPerSecond, prometheus.GaugeValue, stats.End.SumReceived.BitsPerSecond)
 	ch <- prometheus.MustNewConstMetric(e.retransmits, prometheus.GaugeValue, stats.End.SumSent.Retransmits)
 }
 
