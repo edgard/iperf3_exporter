@@ -18,19 +18,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"sync"
 	"time"
 
-	_ "net/http/pprof"
-
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/log"
+	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -45,14 +47,17 @@ var (
 	// Metrics about the iperf3 exporter itself.
 	iperfDuration = prometheus.NewSummary(prometheus.SummaryOpts{Name: prometheus.BuildFQName(namespace, "exporter", "duration_seconds"), Help: "Duration of collections by the iperf3 exporter."})
 	iperfErrors   = prometheus.NewCounter(prometheus.CounterOpts{Name: prometheus.BuildFQName(namespace, "exporter", "errors_total"), Help: "Errors raised by the iperf3 exporter."})
+
+	logger log.Logger
 )
 
-// iperfResult collects the partial result from the iperf3 run
+// iperfResult collects the partial result from the iperf3 run.
 type iperfResult struct {
 	End struct {
 		SumSent struct {
-			Seconds float64 `json:"seconds"`
-			Bytes   float64 `json:"bytes"`
+			Seconds     float64 `json:"seconds"`
+			Bytes       float64 `json:"bytes"`
+			Retransmits float64 `json:"retransmits"`
 		} `json:"sum_sent"`
 		SumReceived struct {
 			Seconds float64 `json:"seconds"`
@@ -76,6 +81,7 @@ type Exporter struct {
 	sentBytes       *prometheus.Desc
 	receivedSeconds *prometheus.Desc
 	receivedBytes   *prometheus.Desc
+	retransmits     *prometheus.Desc
 }
 
 var bitrateMask = regexp.MustCompile(`^[0-9]+([KMG])?(\/[0-9]+)?$`)
@@ -93,6 +99,7 @@ func NewExporter(target string, port int, period time.Duration, timeout time.Dur
 		sentBytes:       prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
 		receivedSeconds: prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_seconds"), "Total seconds spent receiving packets.", nil, nil),
 		receivedBytes:   prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "received_bytes"), "Total received bytes.", nil, nil),
+		retransmits:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "retransmits"), "Total retransmits", nil, nil),
 	}
 }
 
@@ -104,6 +111,7 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.sentBytes
 	ch <- e.receivedSeconds
 	ch <- e.receivedBytes
+	ch <- e.retransmits
 }
 
 // Collect probes the configured iperf3 server and delivers them as Prometheus
@@ -125,16 +133,20 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	out, err := exec.CommandContext(ctx, iperfCmd, iperfArgs...).Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
+
 		iperfErrors.Inc()
-		log.Errorf("Failed to run iperf3: %s", err)
+		level.Error(logger).Log("msg", "Failed to run iperf3", "err", err)
+
 		return
 	}
 
 	stats := iperfResult{}
 	if err := json.Unmarshal(out, &stats); err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
+
 		iperfErrors.Inc()
-		log.Errorf("Failed to parse iperf3 result: %s", err)
+		level.Error(logger).Log("msg", "Failed to parse iperf3 result", "err", err)
+
 		return
 	}
 
@@ -143,6 +155,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(e.sentBytes, prometheus.GaugeValue, stats.End.SumSent.Bytes)
 	ch <- prometheus.MustNewConstMetric(e.receivedSeconds, prometheus.GaugeValue, stats.End.SumReceived.Seconds)
 	ch <- prometheus.MustNewConstMetric(e.receivedBytes, prometheus.GaugeValue, stats.End.SumReceived.Bytes)
+	ch <- prometheus.MustNewConstMetric(e.retransmits, prometheus.GaugeValue, stats.End.SumSent.Retransmits)
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -150,6 +163,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if target == "" {
 		http.Error(w, "'target' parameter must be specified", http.StatusBadRequest)
 		iperfErrors.Inc()
+
 		return
 	}
 
@@ -164,6 +178,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 	if targetPort == 0 {
 		targetPort = 5201
 	}
@@ -179,6 +194,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 	if runPeriod.Seconds() == 0 {
 		runPeriod = time.Second * 5
 	}
@@ -203,6 +219,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 	if timeoutSeconds == 0 {
 		if timeout.Seconds() > 0 {
 			timeoutSeconds = timeout.Seconds()
@@ -231,13 +248,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.AddFlags(kingpin.CommandLine)
+	promlogConfig := &promlog.Config{}
+	flag.AddFlags(kingpin.CommandLine, promlogConfig)
 	kingpin.Version(version.Print("iperf3_exporter"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	log.Info("Starting iperf3 exporter", version.Info())
-	log.Info("Build context", version.BuildContext())
+	logger = promlog.New(promlogConfig)
+	level.Info(logger).Log("msg", "Starting iperf3 exporter", "version", version.Info())
+	level.Info(logger).Log("msg", "Build context", "context", version.BuildContext())
 
 	prometheus.MustRegister(version.NewCollector("iperf3_exporter"))
 	prometheus.MustRegister(iperfDuration)
@@ -248,6 +267,7 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
+
 		_, err := w.Write([]byte(`<html>
     <head><title>iPerf3 Exporter</title></head>
     <body>
@@ -256,7 +276,7 @@ func main() {
     <p><a href='` + *metricsPath + `'>Metrics</a></p>
     </html>`))
 		if err != nil {
-			log.Warnf("Failed to write to HTTP client: %s", err)
+			level.Warn(logger).Log("msg", "Failed to write to HTTP client", "err", err)
 		}
 	})
 
@@ -266,6 +286,6 @@ func main() {
 		WriteTimeout: 60 * time.Second,
 	}
 
-	log.Infof("Listening on %s", srv.Addr)
-	log.Fatal(srv.ListenAndServe())
+	level.Info(logger).Log("msg", "Listening on", "address", srv.Addr)
+	level.Error(logger).Log("msg", "Server stopped", "err", srv.ListenAndServe())
 }
