@@ -157,6 +157,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	out, err := cmd.Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
+		// Return all metrics with 0 values when iperf3 fails to run
+		ch <- prometheus.MustNewConstMetric(e.sentSeconds, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.sentBytes, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.sentBitsPerSecond, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.receivedSeconds, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.receivedBytes, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.receivedBitsPerSecond, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.retransmits, prometheus.GaugeValue, 0)
 
 		iperfErrors.Inc()
 
@@ -173,6 +181,14 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	stats := iperfResult{}
 	if err := json.Unmarshal(out, &stats); err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
+		// Return all metrics with 0 values when iperf3 result parsing fails
+		ch <- prometheus.MustNewConstMetric(e.sentSeconds, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.sentBytes, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.sentBitsPerSecond, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.receivedSeconds, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.receivedBytes, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.receivedBitsPerSecond, prometheus.GaugeValue, 0)
+		ch <- prometheus.MustNewConstMetric(e.retransmits, prometheus.GaugeValue, 0)
 
 		iperfErrors.Inc()
 		level.Error(logger).Log("msg", "Failed to parse iperf3 result", "err", err)
@@ -287,9 +303,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if timeoutSeconds > 30 {
-		timeoutSeconds = 30
-	}
+	// No longer limiting timeout to 30 seconds
 
 	// Ensure run period is less than timeout to avoid premature termination
 	if runPeriod.Seconds() >= timeoutSeconds {
