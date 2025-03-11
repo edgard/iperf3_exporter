@@ -73,6 +73,7 @@ type Exporter struct {
 	period  time.Duration
 	timeout time.Duration
 	mutex   sync.RWMutex
+	reverse bool
 
 	success         *prometheus.Desc
 	sentSeconds     *prometheus.Desc
@@ -83,12 +84,13 @@ type Exporter struct {
 }
 
 // NewExporter returns an initialized Exporter.
-func NewExporter(target string, port int, period time.Duration, timeout time.Duration) *Exporter {
+func NewExporter(target string, port int, period time.Duration, timeout time.Duration, reverse bool) *Exporter {
 	return &Exporter{
 		target:          target,
 		port:            port,
 		period:          period,
 		timeout:         timeout,
+		reverse:         reverse,
 		success:         prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
 		sentSeconds:     prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_seconds"), "Total seconds spent sending packets.", nil, nil),
 		sentBytes:       prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
@@ -118,7 +120,12 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)).Output()
+	var iperfArgs []string
+	iperfArgs = []string{"-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)}
+	if e.reverse {
+		iperfArgs = append(iperfArgs, "-R")
+	}
+	out, err := exec.CommandContext(ctx, iperfCmd, iperfArgs...).Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
 
@@ -174,6 +181,21 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		targetPort = 5201
 	}
 
+	var reverseMode bool
+	reverse_mode := r.URL.Query().Get("reverse_mode")
+	if reverse_mode != "" {
+		var err error
+		reverseMode, err = strconv.ParseBool(reverse_mode)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("'reverse_mode' parameter must be true or false (boolean): %s", err), http.StatusBadRequest)
+			iperfErrors.Inc()
+
+			return
+		}
+	} else {
+		reverseMode = false
+	}
+
 	var runPeriod time.Duration
 
 	period := r.URL.Query().Get("period")
@@ -224,7 +246,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	registry := prometheus.NewRegistry()
-	exporter := NewExporter(target, targetPort, runPeriod, runTimeout)
+	exporter := NewExporter(target, targetPort, runPeriod, runTimeout, reverseMode)
 	registry.MustRegister(exporter)
 
 	// Delegate http serving to Prometheus client library, which will call collector.Collect.
