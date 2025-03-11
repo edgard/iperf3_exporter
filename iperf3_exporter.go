@@ -20,6 +20,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -76,6 +77,7 @@ type Exporter struct {
 	timeout time.Duration
 	mutex   sync.RWMutex
 	reverse bool
+	bitrate string
 
 	success               *prometheus.Desc
 	sentSeconds           *prometheus.Desc
@@ -87,14 +89,17 @@ type Exporter struct {
 	retransmits           *prometheus.Desc
 }
 
+var bitrateMask = regexp.MustCompile(`^[0-9]+([KMG])?(\\/[0-9]+)?$`)
+
 // NewExporter returns an initialized Exporter.
-func NewExporter(target string, port int, period time.Duration, timeout time.Duration, reverse bool) *Exporter {
+func NewExporter(target string, port int, period time.Duration, timeout time.Duration, reverse bool, bitrate string) *Exporter {
 	return &Exporter{
 		target:                target,
 		port:                  port,
 		period:                period,
 		timeout:               timeout,
 		reverse:               reverse,
+		bitrate:               bitrate,
 		success:               prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "success"), "Was the last iperf3 probe successful.", nil, nil),
 		sentSeconds:           prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_seconds"), "Total seconds spent sending packets.", nil, nil),
 		sentBytes:             prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "sent_bytes"), "Total sent bytes.", nil, nil),
@@ -132,6 +137,9 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	iperfArgs = []string{"-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)}
 	if e.reverse {
 		iperfArgs = append(iperfArgs, "-R")
+	}
+	if e.bitrate != "" {
+		iperfArgs = append(iperfArgs, "-b", e.bitrate)
 	}
 	out, err := exec.CommandContext(ctx, iperfCmd, iperfArgs...).Output()
 	if err != nil {
@@ -206,6 +214,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		reverseMode = false
 	}
 
+	bitrate := r.URL.Query().Get("bitrate")
+	if bitrate != "" {
+		if !bitrateMask.MatchString(bitrate) {
+			http.Error(w, "bitrate must provided as #[KMG][/#], target bitrate in bits/sec (0 for unlimited), (default 1 Mbit/sec for UDP, unlimited for TCP) (optional slash and packet count for burst mode)", http.StatusBadRequest)
+			iperfErrors.Inc()
+
+			return
+		}
+	}
+
 	var runPeriod time.Duration
 
 	period := r.URL.Query().Get("period")
@@ -256,7 +274,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	registry := prometheus.NewRegistry()
-	exporter := NewExporter(target, targetPort, runPeriod, runTimeout, reverseMode)
+	exporter := NewExporter(target, targetPort, runPeriod, runTimeout, reverseMode, bitrate)
 	registry.MustRegister(exporter)
 
 	// Delegate http serving to Prometheus client library, which will call collector.Collect.
