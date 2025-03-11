@@ -18,18 +18,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"os/exec"
 	"strconv"
 	"sync"
 	"time"
 
-	_ "net/http/pprof"
-
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/log"
+	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/common/promlog/flag"
 	"github.com/prometheus/common/version"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -44,9 +46,11 @@ var (
 	// Metrics about the iperf3 exporter itself.
 	iperfDuration = prometheus.NewSummary(prometheus.SummaryOpts{Name: prometheus.BuildFQName(namespace, "exporter", "duration_seconds"), Help: "Duration of collections by the iperf3 exporter."})
 	iperfErrors   = prometheus.NewCounter(prometheus.CounterOpts{Name: prometheus.BuildFQName(namespace, "exporter", "errors_total"), Help: "Errors raised by the iperf3 exporter."})
+
+	logger log.Logger
 )
 
-// iperfResult collects the partial result from the iperf3 run
+// iperfResult collects the partial result from the iperf3 run.
 type iperfResult struct {
 	End struct {
 		SumSent struct {
@@ -117,16 +121,20 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	out, err := exec.CommandContext(ctx, iperfCmd, "-J", "-t", strconv.FormatFloat(e.period.Seconds(), 'f', 0, 64), "-c", e.target, "-p", strconv.Itoa(e.port)).Output()
 	if err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
+
 		iperfErrors.Inc()
-		log.Errorf("Failed to run iperf3: %s", err)
+		level.Error(logger).Log("msg", "Failed to run iperf3", "err", err)
+
 		return
 	}
 
 	stats := iperfResult{}
 	if err := json.Unmarshal(out, &stats); err != nil {
 		ch <- prometheus.MustNewConstMetric(e.success, prometheus.GaugeValue, 0)
+
 		iperfErrors.Inc()
-		log.Errorf("Failed to parse iperf3 result: %s", err)
+		level.Error(logger).Log("msg", "Failed to parse iperf3 result", "err", err)
+
 		return
 	}
 
@@ -143,50 +151,63 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if target == "" {
 		http.Error(w, "'target' parameter must be specified", http.StatusBadRequest)
 		iperfErrors.Inc()
+
 		return
 	}
 
 	var targetPort int
+
 	port := r.URL.Query().Get("port")
 	if port != "" {
 		var err error
+
 		targetPort, err = strconv.Atoi(port)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("'port' parameter must be an integer: %s", err), http.StatusBadRequest)
 			iperfErrors.Inc()
+
 			return
 		}
 	}
+
 	if targetPort == 0 {
 		targetPort = 5201
 	}
 
 	var runPeriod time.Duration
+
 	period := r.URL.Query().Get("period")
 	if period != "" {
 		var err error
+
 		runPeriod, err = time.ParseDuration(period)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("'period' parameter must be a duration: %s", err), http.StatusBadRequest)
 			iperfErrors.Inc()
+
 			return
 		}
 	}
+
 	if runPeriod.Seconds() == 0 {
 		runPeriod = time.Second * 5
 	}
 
 	// If a timeout is configured via the Prometheus header, add it to the request.
 	var timeoutSeconds float64
+
 	if v := r.Header.Get("X-Prometheus-Scrape-Timeout-Seconds"); v != "" {
 		var err error
+
 		timeoutSeconds, err = strconv.ParseFloat(v, 64)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to parse timeout from Prometheus header: %s", err), http.StatusInternalServerError)
 			iperfErrors.Inc()
+
 			return
 		}
 	}
+
 	if timeoutSeconds == 0 {
 		if timeout.Seconds() > 0 {
 			timeoutSeconds = timeout.Seconds()
@@ -215,13 +236,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.AddFlags(kingpin.CommandLine)
+	promlogConfig := &promlog.Config{}
+	flag.AddFlags(kingpin.CommandLine, promlogConfig)
 	kingpin.Version(version.Print("iperf3_exporter"))
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	log.Info("Starting iperf3 exporter", version.Info())
-	log.Info("Build context", version.BuildContext())
+	logger = promlog.New(promlogConfig)
+	level.Info(logger).Log("msg", "Starting iperf3 exporter", "version", version.Info())
+	level.Info(logger).Log("msg", "Build context", "context", version.BuildContext())
 
 	prometheus.MustRegister(version.NewCollector("iperf3_exporter"))
 	prometheus.MustRegister(iperfDuration)
@@ -232,6 +255,7 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
+
 		_, err := w.Write([]byte(`<html>
     <head><title>iPerf3 Exporter</title></head>
     <body>
@@ -240,7 +264,7 @@ func main() {
     <p><a href='` + *metricsPath + `'>Metrics</a></p>
     </html>`))
 		if err != nil {
-			log.Warnf("Failed to write to HTTP client: %s", err)
+			level.Warn(logger).Log("msg", "Failed to write to HTTP client", "err", err)
 		}
 	})
 
@@ -250,6 +274,6 @@ func main() {
 		WriteTimeout: 60 * time.Second,
 	}
 
-	log.Infof("Listening on %s", srv.Addr)
-	log.Fatal(srv.ListenAndServe())
+	level.Info(logger).Log("msg", "Listening on", "address", srv.Addr)
+	level.Error(logger).Log("msg", "Server stopped", "err", srv.ListenAndServe())
 }
