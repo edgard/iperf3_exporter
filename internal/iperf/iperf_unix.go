@@ -14,6 +14,9 @@
 //go:build !windows
 // +build !windows
 
-package main
+package iperf
 
-const iperfCmd = "iperf3"
+// GetIperfCmd returns the command name for iperf3 on Unix-like systems.
+func GetIperfCmd() string {
+	return "iperf3"
+}
