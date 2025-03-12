@@ -9,7 +9,6 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'Dockerfile'
-      - 'config.yaml.example'
 
 permissions:
   contents: write

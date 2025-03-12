@@ -1,6 +1,6 @@
 module github.com/edgard/iperf3_exporter
 
-go 1.24
+go 1.24.1
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0

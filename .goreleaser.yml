@@ -46,6 +46,7 @@ archives:
     wrap_in_directory: true
     files:
       - LICENSE
+      - NOTICE
       - README.md
 
 checksum:
