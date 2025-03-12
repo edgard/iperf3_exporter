@@ -3,7 +3,7 @@ BINARY_NAME=iperf3_exporter
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-LDFLAGS=-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE} -X main.builtBy=makefile
+LDFLAGS=-s -w -X github.com/prometheus/common/version.Version=${VERSION} -X github.com/prometheus/common/version.Branch=$(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown") -X github.com/prometheus/common/version.Revision=${COMMIT} -X github.com/prometheus/common/version.BuildDate=${DATE} -X github.com/prometheus/common/version.BuildUser=makefile
 REPO_NAME=$(shell grep -m 1 "^module" go.mod | awk '{print $$2}')
 
 .PHONY: all default build clean test lint vet mod generate docker help
