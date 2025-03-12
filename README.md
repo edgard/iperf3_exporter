@@ -31,7 +31,7 @@ Download the most suitable binary for your platform from [the releases tab](http
 
 ```bash
 # Download (replace VERSION and PLATFORM with appropriate values)
-curl -L -o iperf3_exporter https://github.com/edgard/iperf3_exporter/releases/download/vVERSION/iperf3_exporter-VERSION.PLATFORM
+curl -L -o iperf3_exporter https://github.com/edgard/iperf3_exporter/releases/download/VERSION/iperf3_exporter-VERSION.PLATFORM
 
 # Make executable
 chmod +x iperf3_exporter
