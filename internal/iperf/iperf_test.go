@@ -150,11 +150,16 @@ func TestRunWithMockCommand(t *testing.T) {
 		}
 	}`
 
-	// Mock the execCommand function
+	// Mock both execCommand and execCommandContext functions
 	execCommand = func(command string, args ...string) *exec.Cmd {
 		// Instead of running a subprocess, create a fake command that just returns our sample output
 		cmd := exec.Command("echo", sampleOutput)
+		return cmd
+	}
 
+	execCommandContext = func(ctx context.Context, command string, args ...string) *exec.Cmd {
+		// Use the same mock for context-aware commands
+		cmd := exec.Command("echo", sampleOutput)
 		return cmd
 	}
 
@@ -239,11 +244,16 @@ func TestRunWithCommandFailure(t *testing.T) {
 	// Create a mock execCommand function
 	defer ResetExecCommand()
 
-	// Mock the execCommand function to return a failing command
+	// Mock both execCommand and execCommandContext functions to return a failing command
 	execCommand = func(command string, args ...string) *exec.Cmd {
 		// Create a command that will fail
 		cmd := exec.Command("false")
+		return cmd
+	}
 
+	execCommandContext = func(ctx context.Context, command string, args ...string) *exec.Cmd {
+		// Use the same mock for context-aware commands
+		cmd := exec.Command("false")
 		return cmd
 	}
 
@@ -277,11 +287,16 @@ func TestRunWithInvalidJSON(t *testing.T) {
 	// Create a mock execCommand function
 	defer ResetExecCommand()
 
-	// Mock the execCommand function to return invalid JSON
+	// Mock both execCommand and execCommandContext functions to return invalid JSON
 	execCommand = func(command string, args ...string) *exec.Cmd {
 		// Return invalid JSON
 		cmd := exec.Command("echo", "invalid json")
+		return cmd
+	}
 
+	execCommandContext = func(ctx context.Context, command string, args ...string) *exec.Cmd {
+		// Use the same mock for context-aware commands
+		cmd := exec.Command("echo", "invalid json")
 		return cmd
 	}
 
@@ -315,11 +330,16 @@ func TestRunWithTimeout(t *testing.T) {
 	// Create a mock execCommand function
 	defer ResetExecCommand()
 
-	// Mock the execCommand function to sleep longer than the timeout
+	// Mock both execCommand and execCommandContext functions to sleep longer than the timeout
 	execCommand = func(command string, args ...string) *exec.Cmd {
 		// Create a command that will sleep longer than the timeout
 		cmd := exec.Command("sleep", "2")
+		return cmd
+	}
 
+	execCommandContext = func(ctx context.Context, command string, args ...string) *exec.Cmd {
+		// Use the same mock for context-aware commands
+		cmd := exec.Command("sleep", "2")
 		return cmd
 	}
 

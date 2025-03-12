@@ -26,6 +26,18 @@ import (
 	"time"
 )
 
+// execCommand is a variable that allows tests to mock exec.Command
+var execCommand = exec.Command
+
+// execCommandContext is a variable that allows tests to mock exec.CommandContext
+var execCommandContext = exec.CommandContext
+
+// ResetExecCommand resets the execCommand variables to the default implementation
+func ResetExecCommand() {
+	execCommand = exec.Command
+	execCommandContext = exec.CommandContext
+}
+
 // Runner defines the interface for running iperf3 tests.
 type Runner interface {
 	Run(ctx context.Context, cfg Config) Result
@@ -42,9 +54,6 @@ func NewRunner(logger *slog.Logger) Runner {
 		Logger: logger,
 	}
 }
-
-// execCommand is a variable that allows us to mock exec.Command in tests.
-var execCommand = exec.Command
 
 // Result represents the parsed result from an iperf3 test.
 type Result struct {
@@ -137,10 +146,15 @@ func (r *DefaultRunner) Run(ctx context.Context, cfg Config) Result {
 		iperfArgs = append(iperfArgs, "-b", cfg.Bitrate)
 	}
 
-	// Get the appropriate iperf command for the platform
+	// Create command with context
 	// #nosec G204 - GetIperfCmd returns a hardcoded string and iperfArgs are validated
-	cmd := execCommand(GetIperfCmd(), iperfArgs...)
-	cmd = exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
+	var cmd *exec.Cmd
+	if ctx != nil {
+		// Use the mockable execCommandContext for context-aware commands
+		cmd = execCommandContext(ctx, GetIperfCmd(), iperfArgs...)
+	} else {
+		cmd = execCommand(GetIperfCmd(), iperfArgs...)
+	}
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -211,9 +225,4 @@ func CheckIperf3Exists() error {
 	_, err := exec.LookPath(GetIperfCmd())
 
 	return err
-}
-
-// This is exported for testing purposes.
-func ResetExecCommand() {
-	execCommand = exec.Command
 }
