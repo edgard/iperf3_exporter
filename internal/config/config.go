@@ -15,6 +15,7 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -102,13 +103,41 @@ func ParseFlags() *Config {
 
 	cfg.Logger = slog.New(handler)
 
-	// Web configuration is handled by the exporter-toolkit
+	// Validate configuration
+	if err := cfg.Validate(); err != nil {
+		cfg.Logger.Error("Invalid configuration", "err", err)
+		os.Exit(1)
+	}
 
 	return cfg
 }
 
 // Validate validates the configuration.
 func (c *Config) Validate() error {
-	// Web configuration is validated by the exporter-toolkit
+	// Validate basic configuration
+	if c.MetricsPath == "" {
+		return fmt.Errorf("metrics path cannot be empty")
+	}
+
+	if c.ProbePath == "" {
+		return fmt.Errorf("probe path cannot be empty")
+	}
+
+	if c.Timeout <= 0 {
+		return fmt.Errorf("timeout must be greater than 0")
+	}
+
+	if c.Logger == nil {
+		return fmt.Errorf("logger cannot be nil")
+	}
+
+	// Validate web configuration
+	if c.WebConfig == nil {
+		return fmt.Errorf("web configuration cannot be nil")
+	}
+
+	// Note: Additional web config validation is handled by web.ListenAndServe
+	// which checks for listen addresses and validates TLS config if provided
+
 	return nil
 }

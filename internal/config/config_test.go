@@ -14,11 +14,15 @@
 package config
 
 import (
+	"io"
+	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
+	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
 // TestNewConfig tests that NewConfig returns a Config with default values.
@@ -127,12 +131,87 @@ func TestParseFlags(t *testing.T) {
 
 // TestValidate tests that Validate correctly validates the configuration.
 func TestValidate(t *testing.T) {
-	cfg := NewConfig()
+	tests := []struct {
+		name    string
+		setup   func(*Config)
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "default config without logger",
+			setup:   func(c *Config) {},
+			wantErr: true,
+			errMsg:  "logger cannot be nil",
+		},
+		{
+			name: "valid config",
+			setup: func(c *Config) {
+				c.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+				c.WebConfig = webflag.AddFlags(kingpin.New("test", "test"), ":9579")
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty metrics path",
+			setup: func(c *Config) {
+				c.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+				c.WebConfig = webflag.AddFlags(kingpin.New("test", "test"), ":9579")
+				c.MetricsPath = ""
+			},
+			wantErr: true,
+			errMsg:  "metrics path cannot be empty",
+		},
+		{
+			name: "empty probe path",
+			setup: func(c *Config) {
+				c.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+				c.WebConfig = webflag.AddFlags(kingpin.New("test", "test"), ":9579")
+				c.ProbePath = ""
+			},
+			wantErr: true,
+			errMsg:  "probe path cannot be empty",
+		},
+		{
+			name: "zero timeout",
+			setup: func(c *Config) {
+				c.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+				c.WebConfig = webflag.AddFlags(kingpin.New("test", "test"), ":9579")
+				c.Timeout = 0
+			},
+			wantErr: true,
+			errMsg:  "timeout must be greater than 0",
+		},
+		{
+			name: "nil web config",
+			setup: func(c *Config) {
+				c.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+				c.WebConfig = nil
+			},
+			wantErr: true,
+			errMsg:  "web configuration cannot be nil",
+		},
+	}
 
-	// Validate should always return nil for now
-	err := cfg.Validate()
-	if err != nil {
-		t.Errorf("Validate() returned error: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := NewConfig()
+			tt.setup(cfg)
+
+			err := cfg.Validate()
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Validate() returned nil, want error")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error = %v, want error containing %v", err, tt.errMsg)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+		})
 	}
 }
 
