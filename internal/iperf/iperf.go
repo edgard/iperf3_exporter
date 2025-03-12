@@ -26,13 +26,16 @@ import (
 	"time"
 )
 
-// execCommand is a variable that allows tests to mock exec.Command
+// execCommand is a variable that allows tests to mock exec.Command.
 var execCommand = exec.Command
 
-// execCommandContext is a variable that allows tests to mock exec.CommandContext
+// execCommandContext is a variable that allows tests to mock exec.CommandContext.
 var execCommandContext = exec.CommandContext
 
-// ResetExecCommand resets the execCommand variables to the default implementation
+// lookPath is a variable that allows tests to mock exec.LookPath.
+var lookPath = exec.LookPath
+
+// ResetExecCommand resets the execCommand variables to the default implementation.
 func ResetExecCommand() {
 	execCommand = exec.Command
 	execCommandContext = exec.CommandContext
@@ -222,7 +225,7 @@ func (r *DefaultRunner) Run(ctx context.Context, cfg Config) Result {
 
 // CheckIperf3Exists verifies that the iperf3 command exists and is executable.
 func CheckIperf3Exists() error {
-	_, err := exec.LookPath(GetIperfCmd())
+	_, err := lookPath(GetIperfCmd())
 
 	return err
 }

@@ -167,12 +167,10 @@ The exporter provides the following metrics:
 |--------|-------------|--------|
 | `iperf3_up` | Was the last iperf3 probe successful (1 for success, 0 for failure) | `target`, `port` |
 | `iperf3_sent_seconds` | Total seconds spent sending packets | `target`, `port` |
-| `iperf3_sent_bytes` | Total sent bytes | `target`, `port` |
-| `iperf3_sent_bps` | Bits per second on sending packets | `target`, `port` |
+| `iperf3_sent_bytes` | Total sent bytes for the last test run | `target`, `port` |
 | `iperf3_received_seconds` | Total seconds spent receiving packets | `target`, `port` |
-| `iperf3_received_bytes` | Total received bytes | `target`, `port` |
-| `iperf3_received_bps` | Bits per second on receiving packets | `target`, `port` |
-| `iperf3_retransmits` | Total retransmits | `target`, `port` |
+| `iperf3_received_bytes` | Total received bytes for the last test run | `target`, `port` |
+| `iperf3_retransmits` | Total retransmits for the last test run | `target`, `port` |
 
 Additionally, the exporter provides metrics about itself:
 
@@ -183,11 +181,19 @@ Additionally, the exporter provides metrics about itself:
 
 ### Querying the Bandwidth
 
-You can use the following Prometheus query to get the receiver bandwidth (download speed on measured iperf server) in Mbits/sec:
+You can use the following Prometheus queries to calculate bandwidth in Mbits/sec:
 
+#### Receiver Bandwidth (Download Speed)
 ```
-iperf3_received_bytes{instance="target"} / iperf3_received_seconds{instance="target"} * 8 / 1000000
+rate(iperf3_received_bytes{instance="target"}[1m]) * 8 / 1000000
 ```
+
+#### Sender Bandwidth (Upload Speed)
+```
+rate(iperf3_sent_bytes{instance="target"}[1m]) * 8 / 1000000
+```
+
+These queries use the `rate()` function to calculate the per-second rate from the counter metrics, then convert from bytes to bits (multiply by 8) and from bits to megabits (divide by 1,000,000).
 
 ## Contributing
 
@@ -225,6 +231,8 @@ Examples:
 │   ├── config/              # Configuration handling
 │   ├── iperf/               # iperf3 command execution and result parsing
 │   └── server/              # HTTP server implementation
+├── tests/
+│   └── e2e/                 # End-to-end tests
 ├── .github/
 │   └── workflows/           # GitHub Actions workflows
 ├── .goreleaser.yml          # GoReleaser configuration

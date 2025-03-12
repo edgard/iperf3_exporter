@@ -15,7 +15,7 @@
 package config
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 	"os"
 	"time"
@@ -116,24 +116,24 @@ func ParseFlags() *Config {
 func (c *Config) Validate() error {
 	// Validate basic configuration
 	if c.MetricsPath == "" {
-		return fmt.Errorf("metrics path cannot be empty")
+		return errors.New("metrics path cannot be empty")
 	}
 
 	if c.ProbePath == "" {
-		return fmt.Errorf("probe path cannot be empty")
+		return errors.New("probe path cannot be empty")
 	}
 
 	if c.Timeout <= 0 {
-		return fmt.Errorf("timeout must be greater than 0")
+		return errors.New("timeout must be greater than 0")
 	}
 
 	if c.Logger == nil {
-		return fmt.Errorf("logger cannot be nil")
+		return errors.New("logger cannot be nil")
 	}
 
 	// Validate web configuration
 	if c.WebConfig == nil {
-		return fmt.Errorf("web configuration cannot be nil")
+		return errors.New("web configuration cannot be nil")
 	}
 
 	// Note: Additional web config validation is handled by web.ListenAndServe

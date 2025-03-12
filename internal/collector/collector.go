@@ -68,14 +68,12 @@ type Collector struct {
 	runner  iperf.Runner
 
 	// Metrics
-	up                    *prometheus.Desc
-	sentSeconds           *prometheus.Desc
-	sentBytes             *prometheus.Desc
-	sentBitsPerSecond     *prometheus.Desc
-	receivedSeconds       *prometheus.Desc
-	receivedBytes         *prometheus.Desc
-	receivedBitsPerSecond *prometheus.Desc
-	retransmits           *prometheus.Desc
+	up              *prometheus.Desc
+	sentSeconds     *prometheus.Desc
+	sentBytes       *prometheus.Desc
+	receivedSeconds *prometheus.Desc
+	receivedBytes   *prometheus.Desc
+	retransmits     *prometheus.Desc
 }
 
 // NewCollector creates a new Collector for iperf3 metrics.
@@ -111,12 +109,7 @@ func NewCollectorWithRunner(config ProbeConfig, logger *slog.Logger, runner iper
 		),
 		sentBytes: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "sent_bytes"),
-			"Total sent bytes.",
-			labels, nil,
-		),
-		sentBitsPerSecond: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "sent_bps"),
-			"Bits per second on sending packets.",
+			"Total sent bytes for the last test run.",
 			labels, nil,
 		),
 		receivedSeconds: prometheus.NewDesc(
@@ -126,17 +119,12 @@ func NewCollectorWithRunner(config ProbeConfig, logger *slog.Logger, runner iper
 		),
 		receivedBytes: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "received_bytes"),
-			"Total received bytes.",
-			labels, nil,
-		),
-		receivedBitsPerSecond: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "received_bps"),
-			"Bits per second on receiving packets.",
+			"Total received bytes for the last test run.",
 			labels, nil,
 		),
 		retransmits: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "retransmits"),
-			"Total retransmits.",
+			"Total retransmits for the last test run.",
 			labels, nil,
 		),
 	}
@@ -147,10 +135,8 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.up
 	ch <- c.sentSeconds
 	ch <- c.sentBytes
-	ch <- c.sentBitsPerSecond
 	ch <- c.receivedSeconds
 	ch <- c.receivedBytes
-	ch <- c.receivedBitsPerSecond
 	ch <- c.retransmits
 }
 
@@ -182,20 +168,16 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(c.up, prometheus.GaugeValue, 1, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.sentSeconds, prometheus.GaugeValue, result.SentSeconds, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.sentBytes, prometheus.GaugeValue, result.SentBytes, labelValues...)
-		ch <- prometheus.MustNewConstMetric(c.sentBitsPerSecond, prometheus.GaugeValue, result.SentBitsPerSecond, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.receivedSeconds, prometheus.GaugeValue, result.ReceivedSeconds, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.receivedBytes, prometheus.GaugeValue, result.ReceivedBytes, labelValues...)
-		ch <- prometheus.MustNewConstMetric(c.receivedBitsPerSecond, prometheus.GaugeValue, result.ReceivedBitsPerSecond, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.retransmits, prometheus.GaugeValue, result.Retransmits, labelValues...)
 	} else {
 		// Return all metrics with 0 values when iperf3 fails
 		ch <- prometheus.MustNewConstMetric(c.up, prometheus.GaugeValue, 0, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.sentSeconds, prometheus.GaugeValue, 0, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.sentBytes, prometheus.GaugeValue, 0, labelValues...)
-		ch <- prometheus.MustNewConstMetric(c.sentBitsPerSecond, prometheus.GaugeValue, 0, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.receivedSeconds, prometheus.GaugeValue, 0, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.receivedBytes, prometheus.GaugeValue, 0, labelValues...)
-		ch <- prometheus.MustNewConstMetric(c.receivedBitsPerSecond, prometheus.GaugeValue, 0, labelValues...)
 		ch <- prometheus.MustNewConstMetric(c.retransmits, prometheus.GaugeValue, 0, labelValues...)
 
 		IperfErrors.Inc()
