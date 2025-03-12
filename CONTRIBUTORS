@@ -1,0 +1,19 @@
+# Contributors to iperf3_exporter
+
+This file lists the contributors to the iperf3_exporter project.
+
+## Maintainer
+
+* Edgard Castro (edgard) - Repository owner and main contributor
+
+## Contributors
+
+* Cooper Lees (cooperlees) - Added reverse_mode GET parameter
+* Himura Kazuto (Himura2la) - Added query for bandwidth and build go binary in Docker
+* Marcel Aust (Marcel2508) - Added retransmissions to probe endpoint
+* Matej Bizjak (matejbizjak) - Added optional "port" parameter to the config example
+* Morgan Yandow (morganyandow) - Added support for iperf3 target ports
+* v-zhuravlev - Added optional bitrate HTTP parameter
+* xsteadfastx - Added bits per second for send and received metrics
+
+Thank you to all contributors who have helped improve this project!
