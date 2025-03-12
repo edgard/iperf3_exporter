@@ -98,7 +98,6 @@ func TestIndexHandler(t *testing.T) {
 	expectedContent := []string{
 		"iPerf3 Exporter",
 		"Metrics",
-		"GitHub Repository",
 		"Quick Start",
 		"Probe Parameters",
 	}

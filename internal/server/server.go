@@ -241,10 +241,6 @@ func (s *Server) indexHandler(w http.ResponseWriter, r *http.Request) {
 				Address: s.config.MetricsPath,
 				Text:    "Metrics",
 			},
-			{
-				Address: "https://github.com/edgard/iperf3_exporter",
-				Text:    "GitHub Repository",
-			},
 		},
 		HeaderColor: "#1a73e8",
 	}
@@ -316,7 +312,7 @@ scrape_configs:
     </pre>
     `
 
-	// Add custom CSS for tables
+	// Add custom CSS
 	landingConfig.ExtraCSS = `
     table {
         border-collapse: collapse;
