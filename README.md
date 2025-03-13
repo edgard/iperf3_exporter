@@ -3,7 +3,6 @@
 A Prometheus exporter for iPerf3 network performance metrics.
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/edgard/iperf3_exporter)](https://goreportcard.com/report/github.com/edgard/iperf3_exporter)
-[![Docker Pulls](https://img.shields.io/docker/pulls/ghcr.io/edgard/iperf3_exporter.svg)](https://github.com/users/edgard/packages/container/package/iperf3_exporter)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/edgard/iperf3_exporter/blob/master/LICENSE)
 
 ## ⚠️ IMPORTANT: Docker Image Name Change
@@ -230,7 +229,8 @@ Examples:
 │   ├── collector/           # Prometheus collector implementation
 │   ├── config/              # Configuration handling
 │   ├── iperf/               # iperf3 command execution and result parsing
-│   └── server/              # HTTP server implementation
+│   ├── server/              # HTTP server implementation
+│   └── validation/          # Input validation utilities
 ├── tests/
 │   └── e2e/                 # End-to-end tests
 ├── .github/
