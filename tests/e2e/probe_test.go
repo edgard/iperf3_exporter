@@ -29,7 +29,6 @@ import (
 
 	"github.com/edgard/iperf3_exporter/internal/collector"
 	"github.com/edgard/iperf3_exporter/internal/iperf"
-	"github.com/edgard/iperf3_exporter/internal/validation"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -49,16 +48,14 @@ func TestProbeEndpoint(t *testing.T) {
 	// Create a mock runner with predefined results
 	mockRunner := &MockRunner{
 		Result: iperf.Result{
-			Success: true,
-			Metrics: map[string]float64{
-				"sent_seconds":             5.0,
-				"sent_bytes":               5242880,
-				"sent_bits_per_second":     8388608,
-				"received_seconds":         5.0,
-				"received_bytes":           5242880,
-				"received_bits_per_second": 8388608,
-				"retransmits":              0,
-			},
+			Success:               true,
+			SentSeconds:           5.0,
+			SentBytes:             5242880,
+			SentBitsPerSecond:     8388608,
+			ReceivedSeconds:       5.0,
+			ReceivedBytes:         5242880,
+			ReceivedBitsPerSecond: 8388608,
+			Retransmits:           0,
 		},
 	}
 
@@ -71,19 +68,19 @@ func TestProbeEndpoint(t *testing.T) {
 			return
 		}
 
-		targetPort := 5201 // Default port
-
-		if port := r.URL.Query().Get("port"); port != "" {
+		var targetPort int
+		port := r.URL.Query().Get("port")
+		if port != "" {
 			var err error
 			targetPort, err = strconv.Atoi(port)
 			if err != nil {
 				http.Error(w, "'port' parameter must be an integer", http.StatusBadRequest)
 				return
 			}
-			if err := validation.ValidatePort(targetPort); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+		}
+
+		if targetPort == 0 {
+			targetPort = 5201
 		}
 
 		var reverseMode bool
@@ -98,8 +95,8 @@ func TestProbeEndpoint(t *testing.T) {
 		}
 
 		bitrate := r.URL.Query().Get("bitrate")
-		if err := validation.ValidateBitrate(bitrate); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if bitrate != "" && !iperf.ValidateBitrate(bitrate) {
+			http.Error(w, "invalid bitrate format", http.StatusBadRequest)
 			return
 		}
 

@@ -27,40 +27,46 @@ import (
 )
 
 func main() {
+	// Parse command line flags
 	cfg := config.ParseFlags()
+
+	// Log version and build information
 	cfg.Logger.Info("Starting iperf3 exporter")
 
+	// Check if iperf3 exists
 	if err := iperf.CheckIperf3Exists(); err != nil {
 		cfg.Logger.Error("iperf3 command not found, please install iperf3", "err", err)
 		os.Exit(1)
 	}
 
+	// Create and start HTTP server
 	srv := server.New(cfg)
 
-	// Setup graceful shutdown using signal.NotifyContext
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	// Start server in goroutine
+	// Setup graceful shutdown
+	done := make(chan struct{})
 	go func() {
-		if err := srv.Start(); err != nil {
-			cfg.Logger.Error("HTTP server error", "err", err)
-			os.Exit(1)
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		sig := <-sigChan
+		cfg.Logger.Info("Received signal, shutting down gracefully", "signal", sig.String())
+
+		// Create a context with timeout for shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := srv.Stop(ctx); err != nil {
+			cfg.Logger.Error("HTTP server shutdown error", "err", err)
 		}
+
+		close(done)
 	}()
 
-	// Wait for interrupt signal
-	<-ctx.Done()
-	cfg.Logger.Info("Shutting down gracefully")
-
-	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := srv.Stop(shutdownCtx); err != nil {
-		cfg.Logger.Error("Shutdown error", "err", err)
+	// Start the server
+	if err := srv.Start(); err != nil {
+		cfg.Logger.Error("HTTP server error", "err", err)
 		os.Exit(1)
 	}
 
+	<-done
 	cfg.Logger.Info("Server stopped gracefully")
 }
