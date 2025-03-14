@@ -122,7 +122,8 @@ When making requests to the `/probe` endpoint, the following parameters can be u
 | `target` | Target host to probe (required) | - |
 | `port` | Port that the target iperf3 server is listening on | 5201 |
 | `reverse_mode` | Run iperf3 in reverse mode (server sends, client receives) | false |
-| `bitrate` | Target bitrate in bits/sec (format: #[KMG][/#]) | - |
+| `udp_mode` | Run iperf3 in UDP mode instead of TCP | false |
+| `bitrate` | Target bitrate in bits/sec (format: #[KMG][/#]). For UDP mode, iperf3 defaults to 1 Mbit/sec if not specified. | - |
 | `period` | Duration of the iperf3 test | 5s |
 
 ### Checking the Results
@@ -146,6 +147,8 @@ scrape_configs:
       port: ['5201']
       # Optional: enable reverse mode
       # reverse_mode: ['true']
+      # Optional: enable UDP mode
+      # udp_mode: ['true']
       # Optional: set bitrate limit
       # bitrate: ['100M']
       # Optional: set test period
@@ -170,7 +173,11 @@ The exporter provides the following metrics:
 | `iperf3_sent_bytes` | Total sent bytes for the last test run | `target`, `port` |
 | `iperf3_received_seconds` | Total seconds spent receiving packets | `target`, `port` |
 | `iperf3_received_bytes` | Total received bytes for the last test run | `target`, `port` |
-| `iperf3_retransmits` | Total retransmits for the last test run | `target`, `port` |
+| `iperf3_retransmits` | Total retransmits for the last test run (TCP mode only, omitted in UDP) | `target`, `port` |
+| `iperf3_sent_packets` | Total sent packets for the last UDP test run (UDP mode only) | `target`, `port` |
+| `iperf3_sent_jitter_ms` | Jitter in milliseconds for sent packets (UDP mode only) | `target`, `port` |
+| `iperf3_lost_packets` | Total lost packets for the last UDP test run (UDP mode only) | `target`, `port` |
+| `iperf3_lost_percent` | Percentage of packets lost for the last UDP test run (UDP mode only) | `target`, `port` |
 
 Additionally, the exporter provides metrics about itself:
 

@@ -62,8 +62,13 @@ func (c *Config) GetLandingConfig() web.LandingConfig {
             <td>false</td>
         </tr>
         <tr>
+            <td>udp_mode</td>
+            <td>Run iperf3 in UDP mode instead of TCP</td>
+            <td>false</td>
+        </tr>
+        <tr>
             <td>bitrate</td>
-            <td>Target bitrate in bits/sec (format: #[KMG][/#])</td>
+            <td>Target bitrate in bits/sec (format: #[KMG][/#]). For UDP mode, iperf3 defaults to 1 Mbit/sec if not specified.</td>
             <td>-</td>
         </tr>
         <tr>
@@ -86,6 +91,8 @@ scrape_configs:
       port: ['5201']
       # Optional: enable reverse mode
       # reverse_mode: ['true']
+      # Optional: enable UDP mode
+      # udp_mode: ['true']
       # Optional: set bitrate limit
       # bitrate: ['100M']
       # Optional: set test period

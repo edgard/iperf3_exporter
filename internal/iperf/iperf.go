@@ -67,13 +67,30 @@ type Result struct {
 	ReceivedSeconds       float64
 	ReceivedBytes         float64
 	ReceivedBitsPerSecond float64
-	Retransmits           float64
-	Error                 error
+	// TCP-specific fields
+	Retransmits float64
+	// UDP-specific fields
+	SentPackets         float64
+	SentJitter          float64
+	SentLostPackets     float64
+	SentLostPercent     float64
+	ReceivedPackets     float64
+	ReceivedJitter      float64
+	ReceivedLostPackets float64
+	ReceivedLostPercent float64
+	UDPMode             bool
+	Error               error
 }
 
 // rawResult collects the partial result from the iperf3 run.
 type rawResult struct {
+	Start struct {
+		TestStart struct {
+			Protocol string `json:"protocol"`
+		} `json:"test_start"`
+	} `json:"start"`
 	End struct {
+		// TCP mode uses these fields
 		SumSent struct {
 			Seconds       float64 `json:"seconds"`
 			Bytes         float64 `json:"bytes"`
@@ -85,7 +102,28 @@ type rawResult struct {
 			Bytes         float64 `json:"bytes"`
 			BitsPerSecond float64 `json:"bits_per_second"`
 		} `json:"sum_received"`
+
+		// UDP mode specific structure
+		Streams []struct {
+			UDP UDPInfo `json:"udp"`
+		} `json:"streams"`
+		Sum UDPInfo `json:"sum"`
 	} `json:"end"`
+}
+
+// UDPInfo contains the UDP specific metrics
+type UDPInfo struct {
+	Socket        int     `json:"socket,omitempty"`
+	Start         float64 `json:"start,omitempty"`
+	End           float64 `json:"end,omitempty"`
+	Seconds       float64 `json:"seconds,omitempty"`
+	Bytes         float64 `json:"bytes,omitempty"`
+	BitsPerSecond float64 `json:"bits_per_second,omitempty"`
+	JitterMs      float64 `json:"jitter_ms,omitempty"`
+	LostPackets   float64 `json:"lost_packets,omitempty"`
+	Packets       float64 `json:"packets,omitempty"`
+	LostPercent   float64 `json:"lost_percent,omitempty"`
+	Sender        bool    `json:"sender,omitempty"`
 }
 
 // Config represents the configuration for an iperf3 test.
@@ -95,6 +133,7 @@ type Config struct {
 	Period      time.Duration
 	Timeout     time.Duration
 	ReverseMode bool
+	UDPMode     bool
 	Bitrate     string
 	Logger      *slog.Logger
 }
@@ -145,7 +184,23 @@ func (r *DefaultRunner) Run(ctx context.Context, cfg Config) Result {
 		iperfArgs = append(iperfArgs, "-R")
 	}
 
-	if cfg.Bitrate != "" {
+	if cfg.UDPMode {
+		iperfArgs = append(iperfArgs, "-u")
+	}
+
+	// Apply bitrate:
+	// - For UDP: use specified bitrate or default to "1M" if none specified (iperf3 defaults to 1Mbps for UDP)
+	// - For TCP: only apply if explicitly specified (iperf3 defaults to unlimited for TCP)
+	if cfg.UDPMode {
+		if cfg.Bitrate != "" {
+			iperfArgs = append(iperfArgs, "-b", cfg.Bitrate)
+		} else {
+			// Default to 1Mbps for UDP if not specified
+			iperfArgs = append(iperfArgs, "-b", "1M")
+			cfg.Logger.Debug("Using default 1Mbps bitrate for UDP mode")
+		}
+	} else if cfg.Bitrate != "" {
+		// Only apply bitrate for TCP if explicitly specified
 		iperfArgs = append(iperfArgs, "-b", cfg.Bitrate)
 	}
 
@@ -168,6 +223,7 @@ func (r *DefaultRunner) Run(ctx context.Context, cfg Config) Result {
 		"port", cfg.Port,
 		"period", cfg.Period,
 		"reverse", cfg.ReverseMode,
+		"udp", cfg.UDPMode,
 		"bitrate", cfg.Bitrate,
 	)
 
@@ -204,21 +260,79 @@ func (r *DefaultRunner) Run(ctx context.Context, cfg Config) Result {
 		return result
 	}
 
-	// Populate the result
+	// Set UDPMode based on user configuration
+	result.UDPMode = cfg.UDPMode
 	result.Success = true
-	result.SentSeconds = raw.End.SumSent.Seconds
-	result.SentBytes = raw.End.SumSent.Bytes
-	result.SentBitsPerSecond = raw.End.SumSent.BitsPerSecond
-	result.ReceivedSeconds = raw.End.SumReceived.Seconds
-	result.ReceivedBytes = raw.End.SumReceived.Bytes
-	result.ReceivedBitsPerSecond = raw.End.SumReceived.BitsPerSecond
-	result.Retransmits = raw.End.SumSent.Retransmits
 
-	cfg.Logger.Debug("iperf3 test completed successfully",
-		"target", cfg.Target,
-		"sent_bps", result.SentBitsPerSecond,
-		"received_bps", result.ReceivedBitsPerSecond,
-	)
+	// Handle different metrics based on the protocol mode
+	if !cfg.UDPMode {
+		// TCP Mode - use TCP-specific JSON fields
+		result.SentSeconds = raw.End.SumSent.Seconds
+		result.SentBytes = raw.End.SumSent.Bytes
+		result.SentBitsPerSecond = raw.End.SumSent.BitsPerSecond
+		result.ReceivedSeconds = raw.End.SumReceived.Seconds
+		result.ReceivedBytes = raw.End.SumReceived.Bytes
+		result.ReceivedBitsPerSecond = raw.End.SumReceived.BitsPerSecond
+		result.Retransmits = raw.End.SumSent.Retransmits
+	} else if cfg.UDPMode {
+		// UDP Mode - use UDP-specific JSON fields from streams[0].udp and sum
+		// Add boundary check before accessing Streams[0]
+		if len(raw.End.Streams) > 0 {
+			// Common metrics using sender (streams[0].udp) data
+			result.SentSeconds = raw.End.Streams[0].UDP.Seconds
+			result.SentBytes = raw.End.Streams[0].UDP.Bytes
+			result.SentBitsPerSecond = raw.End.Streams[0].UDP.BitsPerSecond
+
+			// UDP-specific metrics from streams[0].udp
+			result.SentPackets = raw.End.Streams[0].UDP.Packets
+			result.SentJitter = raw.End.Streams[0].UDP.JitterMs
+			result.SentLostPackets = raw.End.Streams[0].UDP.LostPackets
+			result.SentLostPercent = raw.End.Streams[0].UDP.LostPercent
+		} else {
+			cfg.Logger.Warn("UDP mode: no streams found in iperf3 result")
+		}
+
+		// Common metrics using receiver (end.sum) data
+		// Some versions of iperf3 might not include complete sum data for UDP
+		// Access these fields safely to avoid potential issues
+		result.ReceivedSeconds = raw.End.Sum.Seconds
+		result.ReceivedBytes = raw.End.Sum.Bytes
+		result.ReceivedBitsPerSecond = raw.End.Sum.BitsPerSecond
+
+		// UDP-specific metrics from end.sum
+		result.ReceivedPackets = raw.End.Sum.Packets
+		result.ReceivedJitter = raw.End.Sum.JitterMs
+		result.ReceivedLostPackets = raw.End.Sum.LostPackets
+		result.ReceivedLostPercent = raw.End.Sum.LostPercent
+
+		// Check for invalid/missing receiver metrics and log a warning
+		// This can happen with some versions of iperf3
+		if result.ReceivedBitsPerSecond <= 0 && result.ReceivedBytes <= 0 {
+			cfg.Logger.Warn("UDP mode: missing or invalid receiver metrics in iperf3 result",
+				"received_bits_per_second", result.ReceivedBitsPerSecond,
+				"received_bytes", result.ReceivedBytes)
+		}
+	}
+
+	// Enhanced logging with protocol-specific metrics
+	if cfg.UDPMode {
+		cfg.Logger.Debug("iperf3 UDP test completed successfully",
+			"target", cfg.Target,
+			"sent_bps", result.SentBitsPerSecond,
+			"received_bps", result.ReceivedBitsPerSecond,
+			"sent_jitter", result.SentJitter,
+			"received_jitter", result.ReceivedJitter,
+			"sent_lost_percent", result.SentLostPercent,
+			"received_lost_percent", result.ReceivedLostPercent,
+		)
+	} else {
+		cfg.Logger.Debug("iperf3 TCP test completed successfully",
+			"target", cfg.Target,
+			"sent_bps", result.SentBitsPerSecond,
+			"received_bps", result.ReceivedBitsPerSecond,
+			"retransmits", result.Retransmits,
+		)
+	}
 
 	return result
 }

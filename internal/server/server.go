@@ -144,12 +144,33 @@ func (s *Server) probeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var udpMode bool
+
+	udpModeParam := r.URL.Query().Get("udp_mode")
+	if udpModeParam != "" {
+		var err error
+
+		udpMode, err = strconv.ParseBool(udpModeParam)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("'udp_mode' parameter must be true or false (boolean): %s", err), http.StatusBadRequest)
+			collector.IperfErrors.Inc()
+
+			return
+		}
+	}
+
 	bitrate := r.URL.Query().Get("bitrate")
 	if bitrate != "" && !iperf.ValidateBitrate(bitrate) {
 		http.Error(w, "bitrate must provided as #[KMG][/#], target bitrate in bits/sec (0 for unlimited), (default 1 Mbit/sec for UDP, unlimited for TCP) (optional slash and packet count for burst mode)", http.StatusBadRequest)
 		collector.IperfErrors.Inc()
 
 		return
+	}
+
+	// Note: In UDP mode, iperf3 requires a bitrate (defaults to 1Mbps if not specified)
+	// Add a log message for clarity if udpMode is enabled but no bitrate specified
+	if udpMode && bitrate == "" {
+		s.logger.Info("UDP mode is enabled but no bitrate specified - iperf3 will use the default of 1Mbps")
 	}
 
 	var runPeriod time.Duration
@@ -211,6 +232,7 @@ func (s *Server) probeHandler(w http.ResponseWriter, r *http.Request) {
 		Period:      runPeriod,
 		Timeout:     runTimeout,
 		ReverseMode: reverseMode,
+		UDPMode:     udpMode,
 		Bitrate:     bitrate,
 	}
 
