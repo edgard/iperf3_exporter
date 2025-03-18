@@ -10,9 +10,9 @@ updates:
     commit-message:
       prefix: "chore(ci)"
       include: "scope"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     groups:
-      github-actions:
+      all-dependencies:
         patterns:
           - "*"
         update-types:
@@ -32,9 +32,9 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     groups:
-      go-minor-patch:
+      all-dependencies:
         patterns:
           - "*"
         update-types:
@@ -54,9 +54,9 @@ updates:
     commit-message:
       prefix: "chore(docker)"
       include: "scope"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 1
     groups:
-      docker:
+      all-dependencies:
         patterns:
           - "*"
         update-types:
