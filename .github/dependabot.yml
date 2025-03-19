@@ -12,7 +12,7 @@ updates:
       include: "scope"
     open-pull-requests-limit: 1
     groups:
-      all-dependencies:
+      minor-patches:
         patterns:
           - "*"
         update-types:
@@ -21,6 +21,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    rebase-strategy: "auto"
 
   - package-ecosystem: "gomod"
     directory: "/"
@@ -34,7 +35,7 @@ updates:
       include: "scope"
     open-pull-requests-limit: 1
     groups:
-      all-dependencies:
+      minor-patches:
         patterns:
           - "*"
         update-types:
@@ -43,6 +44,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    rebase-strategy: "auto"
 
   - package-ecosystem: "docker"
     directory: "/"
@@ -56,14 +58,13 @@ updates:
       include: "scope"
     open-pull-requests-limit: 1
     groups:
-      all-dependencies:
+      minor-patches:
         patterns:
           - "*"
         update-types:
           - "minor"
           - "patch"
-    allow:
-      - dependency-type: "direct"
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    rebase-strategy: "auto"
