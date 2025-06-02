@@ -12,7 +12,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 go build -o /go/bin/iperf3_exporter ./cmd/iperf3_exporter
 
 # Base stage with common setup
-FROM alpine:3.21 AS base
+FROM alpine:3.22 AS base
 # Install iperf3 and wget for health check
 RUN apk add --no-cache iperf3 wget
 # Add non-root user
