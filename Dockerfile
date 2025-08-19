@@ -5,14 +5,14 @@ WORKDIR /go/bin
 # This is just a placeholder and won't actually be used by goreleaser
 
 # Real builder stage (only used by local target)
-FROM golang:1.24-alpine AS builder-local
+FROM golang:1.25-alpine AS builder-local
 WORKDIR /go/src/github.com/edgard/iperf3_exporter
 COPY . .
 RUN go mod download
 RUN CGO_ENABLED=0 go build -o /go/bin/iperf3_exporter ./cmd/iperf3_exporter
 
 # Base stage with common setup
-FROM alpine:3.21 AS base
+FROM alpine:3.22 AS base
 # Install iperf3 and wget for health check
 RUN apk add --no-cache iperf3 wget
 # Add non-root user
