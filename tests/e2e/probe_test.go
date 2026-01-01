@@ -115,6 +115,8 @@ func TestProbeEndpoint(t *testing.T) {
 			runPeriod = time.Second * 5
 		}
 
+		bind := r.URL.Query().Get("bind")
+
 		// Create a collector with the mock runner
 		registry := prometheus.NewRegistry()
 		probeConfig := collector.ProbeConfig{
@@ -124,6 +126,7 @@ func TestProbeEndpoint(t *testing.T) {
 			Timeout:     30 * time.Second,
 			ReverseMode: reverseMode,
 			Bitrate:     bitrate,
+			Bind:        bind,
 		}
 		c := collector.NewCollectorWithRunner(probeConfig, slog.Default(), mockRunner)
 		registry.MustRegister(c)

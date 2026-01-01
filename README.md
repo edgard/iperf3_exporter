@@ -125,6 +125,7 @@ When making requests to the `/probe` endpoint, the following parameters can be u
 | `udp_mode` | Run iperf3 in UDP mode instead of TCP | false |
 | `bitrate` | Target bitrate in bits/sec (format: #[KMG][/#]). For UDP mode, iperf3 defaults to 1 Mbit/sec if not specified. | - |
 | `period` | Duration of the iperf3 test | 5s |
+| `bind` | Bind to a specific local IP address or interface | - |
 
 ### Checking the Results
 
@@ -153,6 +154,8 @@ scrape_configs:
       # bitrate: ['100M']
       # Optional: set test period
       # period: ['10s']
+      # Optional: bind to specific interface/IP
+      # bind: ['192.168.1.10']
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -188,19 +191,29 @@ Additionally, the exporter provides metrics about itself:
 
 ### Querying the Bandwidth
 
+The byte and second metrics are **gauges** that represent the results from each individual iperf3 test run. Each time Prometheus scrapes the `/probe` endpoint, a new iperf3 test runs and the metrics reflect that test's results.
+
 You can use the following Prometheus queries to calculate bandwidth in Mbits/sec:
 
 #### Receiver Bandwidth (Download Speed)
 ```
-rate(iperf3_received_bytes{instance="target"}[1m]) * 8 / 1000000
+iperf3_received_bytes / iperf3_received_seconds * 8 / 1000000
 ```
 
 #### Sender Bandwidth (Upload Speed)
 ```
-rate(iperf3_sent_bytes{instance="target"}[1m]) * 8 / 1000000
+iperf3_sent_bytes / iperf3_sent_seconds * 8 / 1000000
 ```
 
-These queries use the `rate()` function to calculate the per-second rate from the counter metrics, then convert from bytes to bits (multiply by 8) and from bits to megabits (divide by 1,000,000).
+These queries calculate the average bandwidth for each test by dividing the total bytes by the time duration to get bytes per second, then converting from bytes to bits (multiply by 8) and from bits to megabits (divide by 1,000,000).
+
+For average bandwidth over multiple test runs:
+```
+avg_over_time((iperf3_received_bytes / iperf3_received_seconds * 8 / 1000000)[30m:])
+avg_over_time((iperf3_sent_bytes / iperf3_sent_seconds * 8 / 1000000)[30m:])
+```
+
+**Note:** Since these are gauge metrics (not counters), the `rate()` function should not be used. Each scrape represents a discrete test, not a cumulative counter.
 
 ## Contributing
 
