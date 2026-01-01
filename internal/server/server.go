@@ -33,6 +33,15 @@ import (
 	"github.com/prometheus/exporter-toolkit/web"
 )
 
+const (
+	// defaultTimeout is the default timeout for iperf3 tests when no timeout is configured.
+	defaultTimeout = 30.0
+	// timeoutOffset is the offset to subtract from the Prometheus scrape timeout.
+	// This ensures the exporter finishes slightly before Prometheus gives up,
+	// allowing for network delays and cleaner error handling.
+	timeoutOffset = 0.5
+)
+
 // Server represents the HTTP server for the iperf3 exporter.
 type Server struct {
 	config *config.Config
@@ -194,7 +203,13 @@ func (s *Server) probeHandler(w http.ResponseWriter, r *http.Request) {
 
 	bind := r.URL.Query().Get("bind")
 
-	// If a timeout is configured via the Prometheus header, add it to the request.
+	// Determine the effective timeout for the iperf3 test.
+	// The timeout logic follows these rules:
+	// 1. Start with the Prometheus scrape timeout from the X-Prometheus-Scrape-Timeout-Seconds header
+	// 2. If no header is present, use the default timeout (30s)
+	// 3. Apply an offset to account for network delays
+	// 4. If --iperf3.timeout is configured, use it as an upper limit (minimum of the two values)
+	// This ensures the configured timeout can restrict but never extend the Prometheus timeout.
 	var timeoutSeconds float64
 
 	if v := r.Header.Get("X-Prometheus-Scrape-Timeout-Seconds"); v != "" {
@@ -209,12 +224,23 @@ func (s *Server) probeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Default to 30 seconds if no Prometheus header is present
 	if timeoutSeconds == 0 {
-		if s.config.Timeout.Seconds() > 0 {
-			timeoutSeconds = s.config.Timeout.Seconds()
-		} else {
-			timeoutSeconds = 30
-		}
+		timeoutSeconds = defaultTimeout
+	}
+
+	// Subtract offset to ensure the exporter finishes before Prometheus gives up
+	maxTimeoutSeconds := timeoutSeconds - timeoutOffset
+
+	// Apply the configured timeout as an upper limit if set
+	// Use the minimum of the header timeout (minus offset) and the configured timeout
+	if s.config.Timeout.Seconds() > 0 && (s.config.Timeout.Seconds() < maxTimeoutSeconds || maxTimeoutSeconds < 0) {
+		timeoutSeconds = s.config.Timeout.Seconds()
+	} else if maxTimeoutSeconds > 0 {
+		timeoutSeconds = maxTimeoutSeconds
+	} else {
+		// Fallback in case maxTimeoutSeconds is negative
+		timeoutSeconds = defaultTimeout
 	}
 
 	// Ensure run period is less than timeout to avoid premature termination
