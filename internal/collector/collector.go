@@ -54,6 +54,7 @@ type ProbeConfig struct {
 	ReverseMode bool
 	UDPMode     bool
 	Bitrate     string
+	Bind        string
 }
 
 // Collector implements the prometheus.Collector interface for iperf3 metrics.
@@ -66,6 +67,7 @@ type Collector struct {
 	reverse bool
 	udpMode bool
 	bitrate string
+	bind    string
 	logger  *slog.Logger
 	runner  iperf.Runner
 
@@ -106,6 +108,7 @@ func NewCollectorWithRunner(config ProbeConfig, logger *slog.Logger, runner iper
 		reverse: config.ReverseMode,
 		udpMode: config.UDPMode,
 		bitrate: config.Bitrate,
+		bind:    config.Bind,
 		logger:  logger,
 		runner:  runner,
 
@@ -225,6 +228,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		ReverseMode: c.reverse,
 		UDPMode:     c.udpMode,
 		Bitrate:     c.bitrate,
+		Bind:        c.bind,
 		Logger:      c.logger,
 	})
 

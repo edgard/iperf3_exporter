@@ -135,6 +135,7 @@ type Config struct {
 	ReverseMode bool
 	UDPMode     bool
 	Bitrate     string
+	Bind        string
 	Logger      *slog.Logger
 }
 
@@ -178,6 +179,10 @@ func (r *DefaultRunner) Run(ctx context.Context, cfg Config) Result {
 		"-t", strconv.FormatFloat(cfg.Period.Seconds(), 'f', 0, 64),
 		"-c", cfg.Target,
 		"-p", strconv.Itoa(cfg.Port),
+	}
+
+	if cfg.Bind != "" {
+		iperfArgs = append(iperfArgs, "-B", cfg.Bind)
 	}
 
 	if cfg.ReverseMode {
@@ -225,6 +230,7 @@ func (r *DefaultRunner) Run(ctx context.Context, cfg Config) Result {
 		"reverse", cfg.ReverseMode,
 		"udp", cfg.UDPMode,
 		"bitrate", cfg.Bitrate,
+		"bind", cfg.Bind,
 	)
 
 	out, err := cmd.Output()

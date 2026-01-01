@@ -192,6 +192,8 @@ func (s *Server) probeHandler(w http.ResponseWriter, r *http.Request) {
 		runPeriod = time.Second * 5
 	}
 
+	bind := r.URL.Query().Get("bind")
+
 	// If a timeout is configured via the Prometheus header, add it to the request.
 	var timeoutSeconds float64
 
@@ -234,6 +236,7 @@ func (s *Server) probeHandler(w http.ResponseWriter, r *http.Request) {
 		ReverseMode: reverseMode,
 		UDPMode:     udpMode,
 		Bitrate:     bitrate,
+		Bind:        bind,
 	}
 
 	c := collector.NewCollector(probeConfig, s.logger)
