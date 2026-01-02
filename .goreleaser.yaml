@@ -1,0 +1,87 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/iperf3_exporter
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/prometheus/common/version.Version={{.Version}}
+      - -X github.com/prometheus/common/version.Branch={{.Branch}}
+      - -X github.com/prometheus/common/version.Revision={{.ShortCommit}}
+      - -X github.com/prometheus/common/version.BuildDate={{.Date}}
+      - -X github.com/prometheus/common/version.BuildUser=goreleaser
+    flags:
+      - -trimpath
+
+archives:
+  - name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?(fix|refactor)(\(.+\))??!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\(.+\))??!?:.+$'
+      order: 2
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^test:'
+      - '^chore:'
+      - 'Merge pull request'
+      - 'Merge branch'
+
+dockers:
+  - image_templates:
+      - "ghcr.io/edgard/iperf3_exporter:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    goarch: amd64
+
+  - image_templates:
+      - "ghcr.io/edgard/iperf3_exporter:{{ .Version }}-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/edgard/iperf3_exporter:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/edgard/iperf3_exporter:{{ .Version }}-amd64"
+      - "ghcr.io/edgard/iperf3_exporter:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/edgard/iperf3_exporter:latest"
+    image_templates:
+      - "ghcr.io/edgard/iperf3_exporter:{{ .Version }}-amd64"
+      - "ghcr.io/edgard/iperf3_exporter:{{ .Version }}-arm64"
+
+release:
+  prerelease: auto
