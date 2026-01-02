@@ -272,7 +272,7 @@ Examples:
 │   └── e2e/                 # End-to-end tests
 ├── .github/
 │   └── workflows/           # GitHub Actions workflows
-├── .goreleaser.yml          # GoReleaser configuration
+├── .goreleaser.yaml         # GoReleaser configuration
 ├── Dockerfile               # Multi-arch Docker build configuration
 ├── go.mod                   # Go module definition
 └── README.md                # This file

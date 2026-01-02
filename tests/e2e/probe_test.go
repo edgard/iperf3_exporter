@@ -144,7 +144,7 @@ func TestProbeEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Check response status
 		if resp.StatusCode != http.StatusOK {
@@ -184,7 +184,7 @@ func TestProbeEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Check response status
 		if resp.StatusCode != http.StatusBadRequest {
@@ -210,7 +210,7 @@ func TestProbeEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Check response status
 		if resp.StatusCode != http.StatusOK {
@@ -237,7 +237,7 @@ func TestProbeEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Check response status
 		if resp.StatusCode != http.StatusOK {
@@ -266,7 +266,7 @@ func TestProbeEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Check response status
 		if resp.StatusCode != http.StatusOK {
@@ -295,7 +295,7 @@ func TestProbeEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Check response status
 		if resp.StatusCode != http.StatusOK {
@@ -355,7 +355,7 @@ func TestProbeEndpoint(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to make request: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Check response status
 		if resp.StatusCode != http.StatusOK {

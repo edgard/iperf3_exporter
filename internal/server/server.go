@@ -310,13 +310,13 @@ func (s *Server) healthHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "OK")
+	_, _ = fmt.Fprintln(w, "OK")
 }
 
 // readyHandler handles requests to the /ready endpoint.
 func (s *Server) readyHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Ready")
+	_, _ = fmt.Fprintln(w, "Ready")
 }
 
 // withLogging adds logging middleware to the HTTP handler.
